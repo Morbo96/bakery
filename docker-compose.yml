@@ -1,0 +1,57 @@
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: bakery
+      POSTGRES_USER: bakery
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bakery_dev_password}
+      TZ: Asia/Omsk
+      PGTZ: Asia/Omsk
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./bakeryFinalNew.backup:/backup/bakery.backup:ro
+      - ./db/init.sh:/docker-entrypoint-initdb.d/01-restore.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U bakery -d bakery"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  backend:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql://bakery:${POSTGRES_PASSWORD:-bakery_dev_password}@db:5432/bakery
+      JWT_SECRET: ${JWT_SECRET:-development-secret-change-before-deployment}
+      INITIAL_PASSWORD: ${INITIAL_PASSWORD:-bakery123}
+      TZ: Asia/Omsk
+    depends_on:
+      db:
+        condition: service_healthy
+  frontend:
+    build: ./frontend
+  caddy:
+    image: caddy:2
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-localhost}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - backend
+      - frontend
+  adminer:
+    image: adminer:4
+    environment:
+      ADMINER_DEFAULT_SERVER: db
+    ports:
+      - "127.0.0.1:8081:8080"
+    depends_on:
+      - db
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:
+
